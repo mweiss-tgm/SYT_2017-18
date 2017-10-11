@@ -1,41 +1,74 @@
 package com.weiss.jersey.jaxb;
 
+import javax.ws.rs.Consumes;
+import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
-import javax.ws.rs.Path;
+import javax.ws.rs.PUT;
 import javax.ws.rs.Produces;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Request;
+import javax.ws.rs.core.Response;
+import javax.ws.rs.core.UriInfo;
+import javax.xml.bind.JAXBElement;
 
-@Path("/todo")
+import com.weiss.jersey.jaxb.TodoDao;
+import com.weiss.jersey.jaxb.Todo;
+
 public class TodoResource {
+    @Context
+    UriInfo uriInfo;
+    @Context
+    Request request;
+    String id;
+    public TodoResource(UriInfo uriInfo, Request request, String id) {
+        this.uriInfo = uriInfo;
+        this.request = request;
+        this.id = id;
+    }
 
-    // This method is called if XML is requested
+    //Application integration
     @GET
-    @Produces({MediaType.APPLICATION_XML})
-    public Todo getXML() {
-        Todo todo = new Todo();
-        todo.setSummary("Application XML Todo Summary");
-        todo.setDescription("Application XML Todo Description");
+    @Produces({MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON})
+    public Todo getTodo() {
+        Todo todo = TodoDao.instance.getModel().get(id);
+        if(todo==null)
+            throw new RuntimeException("Get: Todo with " + id +  " not found");
         return todo;
     }
 
-    // This method is called if JSON is requested
+    // for the browser
     @GET
-    @Produces({MediaType.APPLICATION_JSON})
-    public Todo getJSON() {
-        Todo todo = new Todo();
-        todo.setSummary("Application JSON Todo Summary");
-        todo.setDescription("Application JSON Todo Description");
+    @Produces(MediaType.TEXT_XML)
+    public Todo getTodoHTML() {
+        Todo todo = TodoDao.instance.getModel().get(id);
+        if(todo==null)
+            throw new RuntimeException("Get: Todo with " + id +  " not found");
         return todo;
     }
 
-    // This can be used to test the integration with the browser
-    @GET
-    @Produces({ MediaType.TEXT_XML })
-    public Todo getHTML() {
-        Todo todo = new Todo();
-        todo.setSummary("XML Todo Summary");
-        todo.setDescription("XML Todo Description");
-        return todo;
+    @PUT
+    @Consumes(MediaType.APPLICATION_XML)
+    public Response putTodo(JAXBElement<Todo> todo) {
+        Todo c = todo.getValue();
+        return putAndGetResponse(c);
     }
 
+    @DELETE
+    public void deleteTodo() {
+        Todo c = TodoDao.instance.getModel().remove(id);
+        if(c==null)
+            throw new RuntimeException("Delete: Todo with " + id +  " not found");
+    }
+
+    private Response putAndGetResponse(Todo todo) {
+        Response res;
+        if(TodoDao.instance.getModel().containsKey(todo.getId())) {
+            res = Response.noContent().build();
+        } else {
+            res = Response.created(uriInfo.getAbsolutePath()).build();
+        }
+        TodoDao.instance.getModel().put(todo.getId(), todo);
+        return res;
+    }
 }
