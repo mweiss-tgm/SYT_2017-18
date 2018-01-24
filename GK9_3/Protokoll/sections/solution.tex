@@ -2,3 +2,247 @@
 
 \section{Ergebnisse}
 \label{sec:Ergebnisse}
+Die Aufgabe wurde in JavaEE mithilfe von \textbf{Spring Boot, Spring Security, Spring Data JPA} und \textbf{HSQL} realisiert. Dabei wurde mit dem folgenden Tutorial gearbeitet.
+
+\begin{itemize}
+	\item \href{https://hellokoding.com/registration-and-login-example-with-spring-security-spring-boot-spring-data-jpa-hsql-jsp/}{https://hellokoding.com/registration-and-login-example-with-spring-security-spring-boot-spring-data-jpa-hsql-jsp/}
+\end{itemize}
+
+Dabei soll ein RESTful Webservice, bei welchem man sich registrieren und einloggen kann, als Ergebnis rauskommen.
+
+\subsection{Implementierung}
+\subsubsection{Vorraussetzungen}
+
+\begin{itemize}
+	\item Zum ausführen des Projekts muss ein JDK 1.7 oder 1.8 (JDK 1.9 ist zu neu; siehe Probleme) und Maven 3 (oder neuer) installiert sein
+\end{itemize}
+
+\subsubsection{Implementierung}
+\item \textbf{Projekt Dependecies}
+
+Die verwendeten Dependencies (Frameworks) werden im \textbf{pom.xml} File definiert und Maven läd diese dann beim ersten ausführen herunter.
+
+\item \textbf{JPA Entities}
+
+Die @Entity Annotation repräsentiert eine Tabelle in der Datenbank.
+Dann wird als erstes eine Klasse erstellt, welche die Attribute für einen User enthält. Außerdem werden auch noch einige Setter und Getter implementiert.
+
+\begin{lstlisting}[style=Java]
+@Entity
+@Table(name = "user")
+public class User {
+	private Long id;
+	private String username;
+	private String password;
+	private String passwordConfirm;
+	private Set<Role> roles;
+
+	@Id
+	@GeneratedValue(strategy = GenerationType.AUTO)
+	public Long getId() {
+		return id;
+	}
+
+	public void setId(Long id) {
+		this.id = id;
+	}
+
+...
+\end{lstlisting}
+
+Dadurch, dass die ID den Primary Key darstellt, werden die Annotationen @Id und @GenerateValue bei der Methode \textbf{getID()} benötigt.
+
+\clearpage
+
+\item \textbf{JPA Repositories}
+
+Es werden 2 Repositories definiert, für User und Roles. Hier ist zu erwähnen, dass die gängigen Repository Funktionen \textbf{findOne(), findAll(), save(), ...} nicht extra impelemtiert werden müssen, da vom JPARepository geerbt wird und dieses diese Funktionen schon implementiert hat.
+
+\begin{lstlisting}[style=Java]
+public interface UserRepository extends JpaRepository<User, Long> {
+	User findByUsername(String username);
+}
+\end{lstlisting}
+
+\item \textbf{Spring Security's UserDetailService}
+
+Um Login bzw. Authentifizierung mithilfe von Spring Security zu implementieren muss das Interface \textbf{org.springframework.security.core.userdetails.UserDetailsService} implementiert werden.
+
+In dieser Implementierung befindet sich eine Funktion, welche einen User holt und diesem eine Authority zuweist. Zurückgegeben wird ein User-Object mit \textbf{Username, Passwort} und \textbf{Authorities}.
+
+\begin{lstlisting}[style=Java]
+@Service
+public class UserDetailsServiceImpl implements UserDetailsService{
+	@Autowired
+	private UserRepository userRepository;
+
+	@Override
+	@Transactional(readOnly = true)
+	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+		User user = userRepository.findByUsername(username);
+
+		Set<GrantedAuthority> grantedAuthorities = new HashSet<>();
+		for (Role role : user.getRoles()){
+			grantedAuthorities.add(new SimpleGrantedAuthority(role.getName()));
+		}
+
+		return new org.springframework.security.core.userdetails.User(user.getUsername(), user.getPassword(), grantedAuthorities);
+	}
+}
+\end{lstlisting}
+
+\item \textbf{Security Service}
+
+Als nächstes wird der Security Service implementiert, dieser stellt sicher, dass man sich automatisch einloggen lassen kann nachdem man sich registriert hat und gibt auch den Namen des zurzeit eingeloggten Users wieder.
+
+Diese Funktion findet heraus ob ein User eingeloggt ist und welchen Namen dieser hat, falls ein User eingeloggt ist, dann wird dessen Name zurückgegeben, wenn keiner eingeloggt ist wird null returned.
+\begin{lstlisting}[style=Java]
+@Override
+public String findLoggedInUsername() {
+	Object userDetails = SecurityContextHolder.getContext().getAuthentication().getDetails();
+	if (userDetails instanceof UserDetails) {
+		return ((UserDetails)userDetails).getUsername();
+	}
+
+	return null;
+}
+\end{lstlisting}
+
+\clearpage
+
+Mit der nächsten Funktion wird überprüft, ob das automatische Einloggen nach der Registration funktioniert hat.
+
+\begin{lstlisting}[style=Java]
+@Override
+public void autologin(String username, String password) {
+	UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+	UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(userDetails, password, userDetails.getAuthorities());
+
+	authenticationManager.authenticate(usernamePasswordAuthenticationToken);
+
+	if (usernamePasswordAuthenticationToken.isAuthenticated()) {
+		SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
+		logger.debug(String.format("Auto login %s successfully!", username));
+	}
+}
+\end{lstlisting}
+
+\item \textbf{User Service}
+
+Hier wird eine wichtige Funktion implementiert, welche bei einer Registrierung das Passwort verschlüsselt und die Rolle setzt.
+
+\begin{lstlisting}[style=Java]
+@Override
+public void save(User user) {
+	user.setPassword(bCryptPasswordEncoder.encode(user.getPassword()));
+	user.setRoles(new HashSet<>(roleRepository.findAll()));
+	userRepository.save(user);
+}
+\end{lstlisting}
+
+\item \textbf{Spring Validator}
+
+Diese Klasse überprüft, dass bei der Registrierung auch die vorgeschriebenen Bedingungen erfüllt werden. Diese Bedingungen sind zum Beispiel \textbf{Länge des Benutzernamen, Länge des Passworts, Passwortübereinstimmung, ...} und diese werden in der validation.properties Datei gespeichert.
+
+\begin{lstlisting}[style=Java]
+@Override
+public void validate(Object o, Errors errors) {
+	User user = (User) o;
+
+	ValidationUtils.rejectIfEmptyOrWhitespace(errors, "username", "NotEmpty");
+	if (user.getUsername().length() < 6 || user.getUsername().length() > 32) {
+		errors.rejectValue("username", "Size.userForm.username");
+	}
+	if (userService.findByUsername(user.getUsername()) != null) {
+		errors.rejectValue("username", "Duplicate.userForm.username");
+	}
+
+	ValidationUtils.rejectIfEmptyOrWhitespace(errors, "password", "NotEmpty");
+	if (user.getPassword().length() < 8 || user.getPassword().length() > 32) {
+		errors.rejectValue("password", "Size.userForm.password");
+	}
+
+	if (!user.getPasswordConfirm().equals(user.getPassword())) {
+		errors.rejectValue("passwordConfirm", "Diff.userForm.passwordConfirm");
+	}
+}
+\end{lstlisting}
+
+\clearpage
+
+\item \textbf{Controller}
+
+Der Controller kümmert sich um das \glqq mappen\grqq \ der Links (\textbf{/registration, /login}).
+
+Bei der Registrierungsseite wird überprüft ob das Formular korrekt ausgefüllt wurde, wenn ja dann wird man eingeloggt und wenn nicht, dann wird die Seite neu geladen.
+
+\begin{lstlisting}[style=Java]
+@RequestMapping(value = "/registration", method = RequestMethod.POST)
+public String registration(@ModelAttribute("userForm") User userForm, BindingResult bindingResult, Model model) {
+	userValidator.validate(userForm, bindingResult);
+
+	if (bindingResult.hasErrors()) {
+		return "registration";
+	}
+
+	userService.save(userForm);
+
+	securityService.autologin(userForm.getUsername(), userForm.getPasswordConfirm());
+
+	return "redirect:/welcome";
+}
+\end{lstlisting}
+
+Beim aufrufen der Loginseite wird überprüft, ob der User noch eingeloggt ist oder ob andere Fehler vorliegen, wenn keine vorliegen, dann wird die Loginseite aufgerufen.
+
+\begin{lstlisting}[style=Java]
+@RequestMapping(value = "/login", method = RequestMethod.GET)
+public String login(Model model, String error, String logout) {
+	if (error != null)
+		model.addAttribute("error", "Your username and password is invalid.");
+
+	if (logout != null)
+		model.addAttribute("message", "You have been logged out successfully.");
+		
+	return "login";
+}
+\end{lstlisting}
+
+\item \textbf{Web Security Configuration}
+
+Diese Klasse kümmert sich um die Seitenaufrufe und besitzt auch noch eine Methode zum verschlüsseln für zum Beispiel das Passwort eines Users.
+
+\begin{lstlisting}[style=Java]
+@Bean
+public BCryptPasswordEncoder bCryptPasswordEncoder() {
+	return new BCryptPasswordEncoder();
+}
+
+@Override
+protected void configure(HttpSecurity http) throws Exception {
+	http
+		.authorizeRequests()
+		.antMatchers("/resources/**", "/registration").permitAll()
+		.anyRequest().authenticated()
+		.and()
+	.formLogin()
+		.loginPage("/login")
+		.permitAll()
+		.and()
+	.logout()
+		.permitAll();
+}
+\end{lstlisting}
+
+\clearpage
+
+\subsubsection{Ausführen}
+
+Ausgeführt wird das Projekt mit \textbf{mvn clean spring-boot:run} und dann muss man im Browser auf \textbf{localhost:8080} gehen.
+
+
+\subsubsection{Probleme}
+Anfangs gab es ein paar \glqq Startschwierigkeiten\grqq , da die verwendete Java Version nicht mehr kompatibel mit dem ausgewählten Tutorial war und deshalb lange Zeit mit einem Versionierungsfehler gekämpft wurde. Es wurde versuch das Tutorial mit der \textbf{Java Version 9} kompatibel zu machen, jedoch ist dies nach langem bemühen nicht gelungen und als Lösung ist auf eine ältere Java Version umgestiegen worden.
+
+
+\clearpage
