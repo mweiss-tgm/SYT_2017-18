@@ -244,5 +244,26 @@ Ausgeführt wird das Projekt mit \textbf{mvn clean spring-boot:run} und dann mus
 \subsubsection{Probleme}
 Anfangs gab es ein paar \glqq Startschwierigkeiten\grqq , da die verwendete Java Version nicht mehr kompatibel mit dem ausgewählten Tutorial war und deshalb lange Zeit mit einem Versionierungsfehler gekämpft wurde. Es wurde versuch das Tutorial mit der \textbf{Java Version 9} kompatibel zu machen, jedoch ist dies nach langem bemühen nicht gelungen und als Lösung ist auf eine ältere Java Version umgestiegen worden.
 
+\subsubsection{Annotationen}
+\begin{itemize}
+	\item @RequestMapping \\
+		Hier wird festgelegt ob GET oder POST verwendet werden soll. Stellt eine Verknüpfung zwischen Methoden und URLs dar.
+	\item @Autowired \\
+		Bei dieser Annotation wird Spring initialisiert.
+	\item @Entity \\
+		Hier wird eine Datenbank-Tabelle definiert.
+	\item @Table \\
+		Legt den Namen der Datenbank-Tabelle fest.
+	\item @Id \\
+		Legt den Primary Key in der Tabelle fest.
+	\item @GeneratedValue \\
+		Generiert einen Wert und weist diesen dem Primary Key der Tabelle zu, falls dieser keinen Wert hat.
+	\item @Bean \\
+		Wird verwendet um einen einzelnen Bean zu erstellen und dies nicht von Spring automatisch machen lässt.
+	\item @Configuration \\
+		Definiert, dass mehrere Beans innerhalb einer Klasse vorhanden ist.
+\end{itemize}
+
+
 
 \clearpage
